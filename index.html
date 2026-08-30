@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход в школу 1 сентября</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', Courier, monospace; }
+        body { background-color: #050505; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        #game-container { width: 100%; max-width: 800px; height: 100vh; max-height: 600px; background-color: #000; border: 2px solid #333; position: relative; overflow: hidden; }
+        .screen { width: 100%; height: 100%; position: absolute; top: 0; left: 0; display: none; flex-direction: column; justify-content: center; align-items: center; }
+        #title-screen { display: flex; background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.85)), url('title_bg.jpg'); background-size: cover; background-position: center; text-align: center; padding: 20px; }
+        h1 { font-size: 2rem; color: #8b0000; text-shadow: 2px 2px 10px #000; margin-bottom: 20px; letter-spacing: 2px; }
+        .btn { background: rgba(0, 0, 0, 0.85); color: #ccc; border: 1px solid #8b0000; padding: 12px 30px; margin: 10px; font-size: 1rem; cursor: pointer; transition: 0.3s; }
+        .btn:hover { background: #8b0000; color: #fff; box-shadow: 0 0 10px #8b0000; }
+        #game-screen { flex-direction: column; justify-content: flex-end; }
+        #scene-image { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        #monster-overlay {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease-in-out;
+            mix-blend-mode: hard-light;
+        }
+
+        #ui-layer { position: relative; z-index: 3; background: linear-gradient(transparent, rgba(0,0,0,0.95) 40%); padding: 20px; width: 100%; }
+        #fear-bar-container { width: 100%; background: #222; height: 10px; margin-bottom: 10px; border: 1px solid #444; }
+        #fear-bar { width: 0%; height: 100%; background: #8b0000; transition: width 0.5s; }
+        #textbox { font-size: 0.95rem; line-height: 1.4; margin-bottom: 15px; min-height: 65px; text-shadow: 1px 1px 2px #000; font-style: italic; }
+        #options-box { display: flex; flex-direction: column; gap: 8px; }
+        .option-btn { background: rgba(20, 20, 20, 0.9); color: #ddd; border: 1px solid #444; padding: 10px; text-align: left; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-style: normal; }
+        .option-btn:hover { border-color: #8b0000; color: #fff; background: rgba(139, 0, 0, 0.3); }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="title-screen" class="screen">
+        <h1>ВХОД В ШКОЛУ<br>1 СЕНТЯБРЯ</h1>
+        <button class="btn" onclick="startGame()">НАЧАТЬ</button>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <img id="scene-image" src="" alt="Сцена">
+        <img id="monster-overlay" src="game_over.jpg" alt="Монстр">
+        <div id="ui-layer">
+            <div style="font-size: 0.8rem; color: #888; margin-bottom: 3px; font-style: normal;">Уровень страха:</div>
+            <div id="fear-bar-container"><div id="fear-bar"></div></div>
+            <div id="textbox"></div>
+            <div id="options-box"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let fear = 0;
+    let currentAudio = null;
+
+    function playSound(file) {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+        }
+        currentAudio = new Audio(file);
+        currentAudio.play().catch(e => console.log("Ошибка звука:", e));
+    }
+
+    function updateFear(amount) {
+        fear = Math.min(100, Math.max(0, fear + amount));
+        document.getElementById('fear-bar').style.width = fear + '%';
+        
+        const monster = document.getElementById('monster-overlay');
+        if (monster) {
+            monster.style.opacity = (fear / 100) * 0.7;
+        }
+    }
+
+    const story = {
+        // --- ФАЗА 1 ---
+        start: {
+            text: "Мысли: «1 сентября... Школа погружена в туман. Из темноты во дворах вырвалось ЭТО. Оно бежит за мной!»",
+            image: "phase1_street.jpg",
+            audio: "audio_phase1.m4a.m4a",
+            fearAdd: 10,
+            options: [
+                { text: "Забежать на школьный двор", next: "p2_yard", fear: 15 },
+                { text: "Бежать прямо к центральному входу в школу", next: "p2_main_door", fear: 10 }
+            ]
+        },
+
+        // --- ФАЗА 2 ---
+        p2_yard: {
+            text: "Мысли: «Оно мчится следом, снося турники и скамейки... Куда спрятаться?»",
+            image: "phase2_building.jpg",
+            audio: "audio_phase2.m4a.m4a",
+            fearAdd: 15,
+            options: [
+                { text: "Спрыгнуть в подвальное окно школы", next: "p3_basement", fear: 20 },
+                { text: "Забежать через боковую дверь спортзала", next: "p3_gym", fear: 10 }
+            ]
+        },
+        p2_main_door: {
+            text: "Мысли: «Я внутри школы. Двери сотрясаются от ударов! Существо ломает замки!»",
+            image: "phase2_building.jpg",
+            audio: "audio_phase2.m4a.m4a",
+            fearAdd: 15,
+            options: [
+                { text: "Бежать по лестнице на второй этаж", next: "p3_stairs", fear: 10 },
+                { text: "Спрятаться в длинном тёмном коридоре первого этажа", next: "p3_corridor", fear: 15 }
+            ]
+        },
+
+        // --- ФАЗА 3 ---
+        p3_basement: {
+            text: "Мысли: «В подвале темно и сыро. Сверху доносится тяжелый топот твари... Она спускается сюда!»",
+            image: "phase3_inside.jpg",
+            audio: "audio_phase3.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Пролезть через узость вентиляционной трубы", next: "p4_vent", fear: 10 },
+                { text: "Запереться в кабинете завхоза", next: "p4_janitor", fear: 20 }
+            ]
+        },
+        p3_gym: {
+            text: "Мысли: «Спортзал огромный и пустой. Эхо выдает каждый шаг. Существо уже у входа...»",
+            image: "phase3_inside.jpg",
+            audio: "audio_phase3.m4a.m4a",
+            fearAdd: 15,
+            options: [
+                { text: "Залезть на шведскую стенку к балкончику", next: "p4_wall", fear: 20 },
+                { text: "Побежать к запасным выходам", next: "p4_backdoors", fear: 10 }
+            ]
+        },
+        p3_stairs: {
+            text: "Мысли: «Я на этаже кабинетов. Оно выбило дверь снизу и поднимается по ступеням!»",
+            image: "phase3_inside.jpg",
+            audio: "audio_phase3.m4a.m4a",
+            fearAdd: 15,
+            options: [
+                { text: "Забежать в кабинет физики и забаррикадироваться", next: "p4_physics", fear: 10 },
+                { text: "Бежать дальше к выходу на крышу", next: "p4_roof", fear: 20 }
+            ]
+        },
+        p3_corridor: {
+            text: "Мысли: «Коридор с раздевалками... Тень монстра уже видна на стене!»",
+            image: "phase3_inside.jpg",
+            audio: "audio_phase3.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Запрыгнуть в узкий шкафчик для одежды", next: "p4_locker", fear: 25 },
+                { text: "Промыть глаза водой и побежать к пожарному щиту", next: "p4_shield", fear: 10 }
+            ]
+        },
+
+        // --- ФАЗА 4 ---
+        p4_vent: {
+            text: "Мысли: «Труба трещит. Существо рвет металл когтями прямо за моими ногами!»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Выбить решетку и выпрыгнуть в окно на улицу", next: "win_escape", fear: 0 },
+                { text: "Замереть от страха", next: "bad_caught", fear: 40 }
+            ]
+        },
+        p4_janitor: {
+            text: "Мысли: «Дверь прогибается под ударами! Старый засов вот-вот сорвется!»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Опустить тяжелый железный засов и подпереть шкафом", next: "win_trapped", fear: 0 },
+                { text: "Пытаться держать дверь руками", next: "bad_devoured", fear: 40 }
+            ]
+        },
+        p4_wall: {
+            text: "Мысли: «Балкон высоко, а тварь прыгает прямо следом!»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Сбросить на неё тяжелый мат и прыгнуть на лестницу", next: "win_escape", fear: 0 },
+                { text: "Прыгнуть вниз в темноту", next: "bad_fall", fear: 50 }
+            ]
+        },
+        p4_backdoors: {
+            text: "Мысли: «Дверь заперта на цепь! Тварь уже за спиной!»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 25,
+            options: [
+                { text: "Сбить замок огнетушителем и выскочить", next: "win_escape", fear: 0 },
+                { text: "Сдаться панике", next: "bad_caught", fear: 30 }
+            ]
+        },
+        p4_physics: {
+            text: "Мысли: «Оно ломает парты перед дверью! Это последний шанс!»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Запереть тварь в лаборантской и выбежать", next: "win_trapped", fear: 0 },
+                { text: "Забиться под учительский стол", next: "bad_devoured", fear: 40 }
+            ]
+        },
+        p4_roof: {
+            text: "Мысли: «Дверь на крышу поддалась. Дальше только край и туман!»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Спуститься по пожарной лестнице", next: "win_escape", fear: 0 },
+                { text: "Оглянуться назад", next: "bad_fall", fear: 50 }
+            ]
+        },
+        p4_locker: {
+            text: "Мысли: «Оно ходит рядом со шкафом... Слышно только его дыхание...»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 30,
+            options: [
+                { text: "Резко толкнуть дверцу шкафа в тварь и бежать", next: "win_escape", fear: 0 },
+                { text: "Сидеть тихо и не дышать", next: "bad_caught", fear: 30 }
+            ]
+        },
+        p4_shield: {
+            text: "Мысли: «В руках огнетушитель! Тварь прыгает на меня!»",
+            image: "phase4_climax.jpg",
+            audio: "audio_phase4.m4a.m4a",
+            fearAdd: 20,
+            options: [
+                { text: "Выпустить струю пены в морду и запереть в секции", next: "win_trapped", fear: 0 },
+                { text: "Бросить огнетушитель и побежать", next: "bad_devoured", fear: 40 }
+            ]
+        },
+
+        // --- ФАЗА 5: КОНЦОВКИ ---
+        win_escape: {
+            text: "Мысли: «ПОБЕДА 1 — Спасение! Я вырвался из школы на волю. Туман рассеивается, а рык монстра затихает позади!»",
+            image: "win1.jpg",
+            audio: "audio_win1.m4a.m4a",
+            fearAdd: -100,
+            options: [ { text: "Начать заново", next: "restart" } ]
+        },
+        win_trapped: {
+            text: "Мысли: «ПОБЕДА 2 — Каменный заслон! Дверь заблокирована. Существо заперто внутри школы навсегда!»",
+            image: "win2.jpg",
+            audio: "audio_win2.m4a.m4a",
+            fearAdd: -100,
+            options: [ { text: "Начать заново", next: "restart" } ]
+        },
+        bad_caught: {
+            text: "Мысли: «ПРОИГРЫШ 1 — В ловушке! Страх парализовал меня... Существо настигает в темноте...»",
+            image: "game_over.jpg",
+            audio: "audio_bad1.m4a.m4a",
+            fearAdd: 100,
+            options: [ { text: "Попробовать снова", next: "restart" } ]
+        },
+        bad_devoured: {
+            text: "Мысли: «ПРОИГРЫШ 2 — Поглощенный тьмой! Ошибка стала роковой...»",
+            image: "game_over.jpg",
+            audio: "audio_bad2.m4a.m4a",
+            fearAdd: 100,
+            options: [ { text: "Попробовать снова", next: "restart" } ]
+        },
+        bad_fall: {
+            text: "Мысли: «ПРОИГРЫШ 2 — Роковой шаг! В панике я оступаюсь...»",
+            image: "game_over.jpg",
+            audio: "audio_bad2.m4a.m4a",
+            fearAdd: 100,
+            options: [ { text: "Попробовать снова", next: "restart" } ]
+        }
+    };
+
+    function startGame() {
+        document.getElementById('title-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'flex';
+        fear = 0;
+        updateFear(0);
+        showNode('start');
+    }
+
+    function showNode(nodeKey) {
+        if (nodeKey === 'restart') {
+            location.reload();
+            return;
+        }
+
+        const node = story[nodeKey];
+        document.getElementById('scene-image').src = node.image;
+        document.getElementById('textbox').innerText = node.text;
+
+        if (node.fearAdd) updateFear(node.fearAdd);
+        if (node.audio) playSound(node.audio);
+
+        const optionsBox = document.getElementById('options-box');
+        optionsBox.innerHTML = '';
+
+        node.options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = opt.text;
+            btn.onclick = () => {
+                if (opt.fear) updateFear(opt.fear);
+                showNode(opt.next);
+            };
+            optionsBox.appendChild(btn);
+        });
+    }
+</script>
+</body>
+</html>
+
